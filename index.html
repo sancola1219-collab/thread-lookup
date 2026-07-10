@@ -75,30 +75,59 @@
     main{flex-direction:column;}
     aside{width:100%; height:42%; border-left:none; border-top:1px solid var(--line);}
   }
-  /* ── 3D 檢視器 ── */
+  /* ── 尺寸詳圖檢視器 ── */
   #viewer3d{
     position:fixed; inset:0; z-index:50; display:none; flex-direction:column;
-    background:rgba(10,16,28,0.96);
+    background:#eef2f6; color:#1e293b;
   }
   #viewer3d.open{display:flex;}
   #v3dbar{
-    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
-    padding:10px 16px; color:#e2e8f0;
+    position:sticky; top:0; z-index:2; flex:none;
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:10px 16px; background:#0f172a; color:#e2e8f0;
   }
-  #v3dtitle{font-size:18px; font-weight:bold;}
-  #v3dinfo{font-size:13px; color:#94a3b8;}
+  #v3dtitle{font-size:19px; font-weight:bold;}
+  #v3dtag{display:inline-block; padding:2px 11px; border-radius:11px; font-size:13px; color:#fff; font-weight:bold;}
+  #v3dinfo{font-size:12.5px; color:#94a3b8; flex:1 1 200px;}
   #v3dclose{
-    margin-left:auto; padding:6px 14px; border:1px solid #475569; border-radius:6px;
-    background:none; color:#e2e8f0; font-size:14px; cursor:pointer;
+    margin-left:auto; min-width:46px; min-height:44px; padding:6px 16px;
+    border:1px solid #475569; border-radius:8px; background:#1e293b; color:#e2e8f0;
+    font-size:15px; cursor:pointer;
   }
   #v3dclose:hover{background:#334155;}
-  #v3dcanvas{flex:1; touch-action:none; cursor:grab; min-height:0;}
-  #v3dhint{text-align:center; color:#64748b; font-size:12px; padding:6px;}
-  .btn3d{
-    margin:8px 0; padding:7px 14px; border:none; border-radius:6px;
-    background:var(--accent); color:#fff; font-size:14px; cursor:pointer;
+  #v3dscroll{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;}
+  #v3dhero{
+    display:grid; grid-template-columns:repeat(2,1fr); gap:8px;
+    padding:12px 14px; background:#fff; border-bottom:1px solid #e2e8f0;
   }
-  .btn3d:hover{opacity:0.88;}
+  .herocell{background:#f8fafc; border:1px solid #e6ebf1; border-radius:10px; padding:9px 6px; text-align:center;}
+  .herocell .lab{font-size:12px; color:#64748b; margin-bottom:3px;}
+  .herocell .val{font-size:23px; font-weight:bold; line-height:1.1;}
+  .herocell .sub{font-size:11px; color:#94a3b8; margin-top:2px;}
+  #v3dviews{display:flex; gap:8px; padding:12px 14px 2px;}
+  #v3dviews button{
+    flex:1; min-height:46px; border:1px solid #cbd5e1; border-radius:9px;
+    background:#fff; color:#334155; font-size:15px; font-weight:bold; cursor:pointer;
+  }
+  #v3dprofilewrap{padding:8px 12px 6px;}
+  #v3dprofile svg{width:100%; height:auto; display:block; background:#fff;
+    border:1px solid #e2e8f0; border-radius:10px;}
+  #v3dlegend{display:flex; flex-wrap:wrap; gap:8px 16px; padding:10px 16px; font-size:12.5px; color:#475569;}
+  #v3dlegend span::before{content:''; display:inline-block; width:12px; height:12px;
+    border-radius:3px; margin-right:5px; vertical-align:-1px; background:var(--c);}
+  #v3dtable{width:calc(100% - 28px); margin:2px 14px 22px; border-collapse:collapse; font-size:13px; background:#fff;}
+  #v3dtable th,#v3dtable td{border:1px solid #e2e8f0; padding:5px 8px; text-align:left; vertical-align:top;}
+  #v3dtable th{background:#f1f5f9; white-space:nowrap;}
+  #v3dsolid{padding:10px 12px 26px;}
+  #v3dcanvas{width:100%; height:56vh; display:block; background:#0f172a;
+    border-radius:10px; touch-action:none; cursor:grab;}
+  #v3dsolidnote{text-align:center; font-size:12px; color:#64748b; padding:9px 8px 0;}
+  @media (min-width:640px){ #v3dhero{grid-template-columns:repeat(5,1fr);} }
+  .btn3d{
+    margin:8px 0; padding:9px 16px; border:none; border-radius:8px;
+    background:var(--accent); color:#fff; font-size:15px; font-weight:bold; cursor:pointer;
+  }
+  .btn3d:hover{opacity:0.9;}
   /* ── SVG 卡片 ── */
   .card{cursor:pointer;}
   .card rect.box{fill:#fff; stroke-width:1.5; rx:10;}
@@ -132,11 +161,33 @@
 <div id="viewer3d">
   <div id="v3dbar">
     <span id="v3dtitle"></span>
+    <span id="v3dtag"></span>
     <span id="v3dinfo"></span>
     <button id="v3dclose">✕ 關閉</button>
   </div>
-  <canvas id="v3dcanvas"></canvas>
-  <div id="v3dhint">拖曳＝旋轉｜滾輪／雙指＝縮放｜放開自動慢轉</div>
+  <div id="v3dscroll">
+    <div id="v3dhero"></div>
+    <div id="v3dviews">
+      <button data-view="profile" class="on">📐 牙型剖面詳圖</button>
+      <button data-view="solid">🧊 立體牙紋</button>
+    </div>
+    <div id="v3dprofilewrap">
+      <div id="v3dprofile"></div>
+      <div id="v3dlegend">
+        <span style="--c:#2563eb">直徑</span>
+        <span style="--c:#ea580c">牙距</span>
+        <span style="--c:#16a34a">牙型／牙角</span>
+        <span style="--c:#9333ea">錐度</span>
+        <span style="--c:#64748b">軸線／資訊</span>
+      </div>
+      <table id="v3dtable"></table>
+    </div>
+    <div id="v3dsolid" style="display:none">
+      <canvas id="v3dcanvas"></canvas>
+      <div id="v3dsolidnote"></div>
+      <div id="v3dhint" style="text-align:center;color:#64748b;font-size:12px;padding:6px">拖曳＝旋轉｜滾輪／雙指＝縮放｜放開自動慢轉</div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -549,7 +600,7 @@ function renderPanel(){
     `<div class="big">${it.name}<span class="tag" style="background:${gp.color}">${gp.key}</span></div>
      ${it.alias ? `<p><b>一般叫法：</b>${it.alias}</p>` : ''}
      <p><b>正式標稱：</b>${it.desig}</p>
-     <button class="btn3d" onclick="open3D()">🧊 3D 檢視（可旋轉縮放）</button>
+     <button class="btn3d" onclick="open3D()">📐 尺寸詳圖＋3D 立體檢視</button>
      <table>
        <tr><th>牙峰外徑</th><td>${fmt(it.od)} mm（${it.odIn.toFixed(3)}"）</td></tr>
        <tr><th>牙數</th><td>${fmt(it.tpi)} TPI（每吋牙數）</td></tr>
@@ -566,53 +617,208 @@ function renderPanel(){
 }
 
 /* ============================================================
-   3D 螺牙檢視器 —— 自寫軟體渲染（painter's algorithm），零依賴
-   依所選規格的外徑、牙距、牙角（55°/60°）、錐度（1:16）生成螺旋牙型網格
+   尺寸詳圖檢視器 —— 主角：牙型剖面詳圖(2D SVG，全尺寸標註)
+   輔助：立體牙紋(canvas 軟體渲染)。零依賴。
+   幾何常數（已對 M10×1.5→小徑8.16、PT½→18.63 驗證吻合，勿改）：
+   牙角 55°(PT/PF Whitworth)／60°(NPT/M/UN)；牙深 h=0.6403P(55°)、0.6134P(60°)
+   小徑=大徑−2h；理論三角高 H=P/(2·tan(角/2))；錐牙錐度1:16、單邊≈1°47′
    ============================================================ */
+const STD = {PT:'ISO 7 / JIS B0203', PF:'ISO 228 / JIS B0202',
+             NPT:'ASME B1.20.1', M:'ISO 261 / 262 / 68', UN:'ASME B1.1'};
+
+function threadGeom(it, gp){
+  const P = it.pitch;
+  const alpha = (gp.key==='PT'||gp.key==='PF') ? 55 : 60;
+  const H = P/(2*Math.tan(alpha*Math.PI/360));       // 理論三角高
+  const h = (alpha===55 ? 0.6403 : 0.6134) * P;      // 實際牙深（截頂截底）
+  const d = it.od, d1 = d - 2*h, d2 = d - h;
+  const isTaper = /1:16/.test(it.taper);
+  return {P, alpha, H, h, d, d1, d2, isTaper};
+}
+const r2 = n => (Math.round(n*100)/100).toString();   // 2 位小數
+const r3 = n => (Math.round(n*1000)/1000).toString(); // 3 位小數
+
+/* 牙型剖面詳圖：回傳 SVG 字串（純 SVG＝文字永遠清晰、可縮放、靜態免動畫） */
+function buildProfileSVG(it, gp){
+  const G = threadGeom(it, gp), P = G.P, alpha = G.alpha;
+  const C = {dia:'#2563eb', pit:'#ea580c', form:'#16a34a', tap:'#9333ea',
+             info:'#64748b', ink:'#1e293b', fill:'#eef2f7'};
+  const pw = (s,sz)=>{ let u=0; for(const ch of String(s)) u += (ch.charCodeAt(0)<128?0.6:1.05); return u*sz+16; };
+  const T = [];
+  const L=(x1,y1,x2,y2,c,w,d,mk)=>`<line x1="${(+x1).toFixed(1)}" y1="${(+y1).toFixed(1)}" x2="${(+x2).toFixed(1)}" y2="${(+y2).toFixed(1)}" stroke="${c}" stroke-width="${w||2}"${d?` stroke-dasharray="${d}"`:''}${mk?` marker-start="url(#${mk})" marker-end="url(#${mk})"`:''}/>`;
+  const TX=(x,y,s,sz,c,anc,bold)=>`<text x="${(+x).toFixed(1)}" y="${(+y).toFixed(1)}" font-size="${sz}" fill="${c}" text-anchor="${anc||'start'}"${bold?' font-weight="bold"':''}>${s}</text>`;
+  const PILL=(x,y,s,sz,c)=>{ const w=pw(s,sz), hh=sz+12; return `<g><rect x="${(x-w/2).toFixed(1)}" y="${(y-hh/2).toFixed(1)}" width="${w.toFixed(1)}" height="${hh}" rx="6" fill="#ffffff" stroke="${c}" stroke-width="1.3"/><text x="${(+x).toFixed(1)}" y="${(y+sz*0.35).toFixed(1)}" font-size="${sz}" fill="${c}" text-anchor="middle" font-weight="bold">${s}</text></g>`; };
+
+  T.push(`<svg viewBox="0 0 1000 740" xmlns="http://www.w3.org/2000/svg" font-family="'Microsoft JhengHei','Noto Sans TC',sans-serif">`);
+  T.push(`<rect x="0" y="0" width="1000" height="740" fill="#ffffff"/>`);
+  T.push(`<defs>`);
+  for(const [id,c] of [['mdia',C.dia],['mpit',C.pit],['mfor',C.form]])
+    T.push(`<marker id="${id}" markerWidth="11" markerHeight="9" refX="8.5" refY="4" orient="auto-start-reverse"><path d="M0,0 L9,4 L0,8 z" fill="${c}"/></marker>`);
+  T.push(`</defs>`);
+  T.push(TX(500,30,'牙型剖面詳圖　（放大示意，數字為實際尺寸 mm）',19,C.ink,'middle',true));
+
+  /* ── 主視圖：縱向剖面（上下鏡射，垂直距離＝真直徑）── */
+  const AX=225, halfV=86, depthV=30;
+  const crestT=AX-halfV, rootT=crestT+depthV, rootB=AX+halfV-depthV, crestB=AX+halfV;
+  const x0=170, tw=112, NT=4, xE=x0+tw*NT;
+  const up=[];
+  for(let i=0;i<NT;i++){ const b=x0+i*tw;
+    up.push([b,rootT]); up.push([b+tw*0.12,rootT]); up.push([b+tw*0.38,crestT]);
+    up.push([b+tw*0.62,crestT]); up.push([b+tw*0.88,rootT]); }
+  up.push([xE,rootT]);
+  const dn=up.map(([x,y])=>[x,2*AX-y]);
+  const body='M'+up.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L')+' L'+dn.slice().reverse().map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L')+' Z';
+  T.push(`<clipPath id="cclip"><path d="${body}"/></clipPath>`);
+  T.push(`<path d="${body}" fill="${C.fill}"/>`);
+  let hatch='';
+  for(let hx=x0-200;hx<xE+40;hx+=15) hatch+=L(hx,crestT-12,hx+(crestB-crestT+24),crestB+12,'#cbd5e1',1);
+  T.push(`<g clip-path="url(#cclip)">${hatch}</g>`);
+  T.push(`<path d="${body}" fill="none" stroke="${C.ink}" stroke-width="2.5" stroke-linejoin="round"/>`);
+  T.push(L(x0-70,AX,xE+270,AX,C.info,1.4,'22 5 4 5'));
+  T.push(TX(x0-70,AX-7,'軸線（中心線）',14,C.info));
+
+  // 牙距 P（橘，圖頂水平）
+  const p1=x0+0.5*tw, p2=x0+1.5*tw, py=crestT-42;
+  T.push(L(p1,crestT-4,p1,py-2,C.pit,1)); T.push(L(p2,crestT-4,p2,py-2,C.pit,1));
+  T.push(L(p1,py,p2,py,C.pit,2,'','mpit'));
+  T.push(PILL((p1+p2)/2,py-17,`牙距 P ${r3(P)}（${fmt(it.tpi)} TPI）`,18,C.pit));
+
+  // 大徑（藍，最外側，跨牙峰↔牙峰）
+  const cxL=x0+(NT-0.5)*tw, xMaj=xE+66;
+  T.push(L(cxL,crestT,xMaj+6,crestT,C.dia,1)); T.push(L(cxL,crestB,xMaj+6,crestB,C.dia,1));
+  T.push(L(xMaj,crestT,xMaj,crestB,C.dia,2,'','mdia'));
+  T.push(PILL(xMaj,AX-26,`外徑 ⌀${r3(it.od)}`,18,C.dia));
+  // 小徑（藍，內側，跨牙底↔牙底）
+  const vx=x0+(NT-1)*tw, xMin=xE+150;
+  T.push(L(vx,rootT,xMin+6,rootT,C.dia,1)); T.push(L(vx,rootB,xMin+6,rootB,C.dia,1));
+  T.push(L(xMin,rootT,xMin,rootB,C.dia,2,'','mdia'));
+  T.push(PILL(xMin,AX+26,`底徑 ⌀${r2(G.d1)}`,18,C.dia));
+
+  // 底孔（灰）
+  T.push(TX(x0,crestB+40, it.drill?`攻牙底孔　約 ⌀${r2(it.drill)} mm（內牙攻牙前鑽孔）`:'攻牙底孔　—（大口徑少攻牙）',15,C.info));
+  // 錐度／平行 註記（主視圖下方，避免與頂部牙距標註打架）
+  if(G.isTaper){
+    T.push(TX(x0,crestB+70,'錐度 1:16（沿直徑）· 單邊 ≈1°47′（1.79°）· 前端漸細',15,C.tap,'start',true));
+    const tx=x0, ty=crestB+92;
+    T.push(L(tx,ty,tx+128,ty,C.tap,1.6)); T.push(L(tx+128,ty,tx+128,ty-8,C.tap,1.6)); T.push(L(tx,ty,tx+128,ty-8,C.tap,1.6));
+    T.push(TX(tx+64,ty+14,'16',12,C.tap,'middle')); T.push(TX(tx+134,ty-3,'1',12,C.tap));
+  } else {
+    T.push(TX(x0,crestB+70,'平行牙 · 無錐度 · 牙峰線平行軸線',15,C.info,'start',true));
+  }
+
+  /* ── 牙型放大詳圖（真實牙角）── */
+  T.push(TX(500,472,`牙型放大詳圖　（真實牙角 ${alpha}°）`,18,C.ink,'middle',true));
+  const a2=alpha*Math.PI/360, Pd=210, hPx=(alpha===55?0.6403:0.6134)*Pd;
+  const flankRun=hPx*Math.tan(a2), cf=Pd*0.14, rf=Pd-cf-2*flankRun;
+  const rootY=680, crestY=rootY-hPx, X0d=280;
+  const dp=[]; let x=X0d; dp.push([x,rootY]);
+  for(let i=0;i<2;i++){ x+=rf/2; dp.push([x,rootY]); x+=flankRun; dp.push([x,crestY]); x+=cf; dp.push([x,crestY]); x+=flankRun; dp.push([x,rootY]); x+=rf/2; dp.push([x,rootY]); }
+  const detEnd=x, detBaseY=rootY+50;
+  const detBody='M'+dp.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L')+` L${detEnd.toFixed(1)},${detBaseY} L${X0d.toFixed(1)},${detBaseY} Z`;
+  T.push(`<clipPath id="dclip"><path d="${detBody}"/></clipPath>`);
+  T.push(`<path d="${detBody}" fill="${C.fill}"/>`);
+  let dh=''; for(let hx=X0d-40;hx<detEnd;hx+=15) dh+=L(hx,crestY-6,hx+(detBaseY-crestY+12),detBaseY+6,'#cbd5e1',1);
+  T.push(`<g clip-path="url(#dclip)">${dh}</g>`);
+  T.push(`<path d="${detBody}" fill="none" stroke="${C.ink}" stroke-width="2.5" stroke-linejoin="round"/>`);
+  T.push(L(X0d-54,crestY,detEnd+96,crestY,C.info,1,'6 5'));
+  T.push(L(X0d-54,rootY,detEnd+96,rootY,C.info,1,'6 5'));
+  T.push(TX(detEnd+100,crestY+4,'牙峰線',12,C.info)); T.push(TX(detEnd+100,rootY+4,'牙底線',12,C.info));
+
+  // 牙角弧（綠，延伸兩側面至理論尖頂）
+  const crest1c=X0d+rf/2+flankRun+cf/2, crest2c=crest1c+Pd;
+  const apexY=crestY-(1/Math.tan(a2))*(cf/2), apexX=crest2c;
+  const lEnd=crest2c-cf/2, rEnd=crest2c+cf/2;
+  T.push(L(lEnd,crestY,apexX,apexY,C.form,1.4,'5 4')); T.push(L(rEnd,crestY,apexX,apexY,C.form,1.4,'5 4'));
+  const rA=54, angL=Math.atan2(crestY-apexY,lEnd-apexX), angR=Math.atan2(crestY-apexY,rEnd-apexX);
+  T.push(`<path d="M${(apexX+rA*Math.cos(angL)).toFixed(1)},${(apexY+rA*Math.sin(angL)).toFixed(1)} A${rA},${rA} 0 0 1 ${(apexX+rA*Math.cos(angR)).toFixed(1)},${(apexY+rA*Math.sin(angR)).toFixed(1)}" fill="none" stroke="${C.form}" stroke-width="2"/>`);
+  T.push(TX(apexX,apexY-10,'牙角',14,C.form,'middle'));
+  T.push(TX(apexX,apexY+rA+30,`${alpha}°`,30,C.form,'middle',true));
+
+  // 牙深 h（綠，右側垂直）
+  const xh=detEnd+50;
+  T.push(L(detEnd-flankRun*0.4,crestY,xh+6,crestY,C.form,1)); T.push(L(detEnd,rootY,xh+6,rootY,C.form,1));
+  T.push(L(xh,crestY,xh,rootY,C.form,2,'','mfor'));
+  T.push(PILL(xh+2,(crestY+rootY)/2,`牙深 h ${r3(G.h)}`,15,C.form));
+  // 虛線延伸至理論尖頂已示意 H；H 數值見下方尺寸表
+
+  T.push(`</svg>`);
+  return T.join('');
+}
+
+function buildHero(it, gp){
+  const G = threadGeom(it, gp), metric = gp.key==='M';
+  const cells = [
+    ['外徑（大徑）', `⌀${r3(it.od)}`, 'mm'],
+    ['牙距 P', `${r3(it.pitch)}`, metric?'mm（公制）':`mm · ${fmt(it.tpi)} TPI`],
+    ['牙角', `${G.alpha}°`, G.alpha===55?'Whitworth':'ISO／UN'],
+    ['攻牙底孔', it.drill?`約⌀${r2(it.drill)}`:'—', it.drill?'mm':'大口徑少攻牙'],
+    ['牙型', G.isTaper?'錐牙':'平行牙', G.isTaper?'錐度 1:16':'直牙'],
+  ];
+  return cells.map(([l,v,s])=>`<div class="herocell"><div class="lab">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join('');
+}
+
+function buildDimTable(it, gp){
+  const G = threadGeom(it, gp), metric = gp.key==='M';
+  const rows = [
+    ['外徑（大徑）d', `${r3(it.od)} mm（${it.odIn.toFixed(3)}"）`],
+    ['底徑（小徑）d₁', `${r2(G.d1)} mm　＝ 大徑 − 2×牙深`],
+    ['中徑（節徑）d₂', `${r2(G.d2)} mm（參考）`],
+    ['牙距 P', metric?`${r3(it.pitch)} mm（公制以牙距標示）`:`${r3(it.pitch)} mm　＝ 25.4 ÷ ${fmt(it.tpi)}`],
+    ['牙數', metric?`約 ${r2(it.tpi)} TPI（公制不以此標示）`:`${fmt(it.tpi)} TPI（每吋牙數）`],
+    ['牙角 α', `${G.alpha}°（${G.alpha===55?'惠氏 Whitworth':'ISO／UN'}）`],
+    ['牙深 h', `${r3(G.h)} mm　＝ ${G.alpha===55?'0.6403':'0.6134'}×P`],
+    ['理論三角高 H', `${r3(G.H)} mm　＝ P/(2·tan(α/2))`],
+    ['錐度', G.isTaper?'1:16（沿直徑）· 單邊 ≈1°47′':'平行牙 · 無錐度'],
+    ['攻牙底孔', it.drill?`約 ⌀${r2(it.drill)} mm`:'—（大口徑少攻牙）'],
+    ['正式標稱', it.desig],
+    ['依據標準', STD[gp.key]||''],
+  ];
+  return `<tr><th colspan="2" style="background:${gp.color};color:#fff;font-size:14px">${it.name}　完整尺寸表</th></tr>` +
+    rows.map(([k,v])=>`<tr><th>${k}</th><td>${v}</td></tr>`).join('');
+}
+
 const v3d = {
   wrap: document.getElementById('viewer3d'),
   canvas: document.getElementById('v3dcanvas'),
   ctx: document.getElementById('v3dcanvas').getContext('2d'),
-  mesh: null, quads: [],
-  rx: -0.45, ry: 0.6, zoom: 1, auto: true, raf: 0,
+  quads: [],
+  rx: -0.5, ry: 0.5, zoom: 1, auto: true, timer: 0,
 };
 
 function buildMesh(it, gp){
   const R = it.od/2, p = it.pitch;
   const angDeg = (gp.key==='PT'||gp.key==='PF') ? 55 : 60;
-  const H = p/(2*Math.tan(angDeg*Math.PI/360));   // 完整牙高
-  const depth = H*0.72;                            // 截頂截底後的實際牙深
+  const h = (angDeg===55 ? 0.6403 : 0.6134) * p;   // 真實牙深（與剖面詳圖同源）
+  const depth = h * 1.9;                            // 立體視覺放大（示意，非實際比例）
   const len = Math.max(R*2.6, p*6);
-  const taperR = it.taper.includes('1:16') ? 1/32 : 0; // 半徑方向錐度
-  const NT = 52;                                   // 圓周分段
-  const NZ = Math.min(140, Math.max(60, Math.round(len/p*18))); // 軸向分段
-  const pts = [];
+  const taperR = /1:16/.test(it.taper) ? 1/32 : 0;
+  const NT = 80;                                    // 圓周分段（提高，螺旋不被抹平）
+  const NZ = Math.min(200, Math.max(80, Math.round(len/p*20)));
+  const pts = [], rr = [];
   for(let iz=0; iz<=NZ; iz++){
-    const z = len*iz/NZ;
-    const Rb = R - taperR*(len - z);               // 前端較細（錐牙）
-    const row = [];
+    const z = len*iz/NZ, Rb = R - taperR*(len - z), row = [], rrow = [];
     for(let itc=0; itc<=NT; itc++){
       const th = 2*Math.PI*itc/NT;
-      let phase = (z/p - th/(2*Math.PI)) % 1;
-      if(phase < 0) phase += 1;
-      let t = Math.abs(phase*2 - 1);               // 1=牙頂 0=牙底 三角波
-      t = Math.min(1, Math.max(0, (t - 0.125)/0.75)); // 頂/底各留平面
+      let phase = (z/p - th/(2*Math.PI)) % 1; if(phase < 0) phase += 1;
+      let t = Math.abs(phase*2 - 1); t = Math.min(1, Math.max(0, (t - 0.125)/0.75));
       const r = Rb - depth*(1 - t);
-      row.push([z - len/2, r*Math.cos(th), r*Math.sin(th)]);
+      row.push([z - len/2, r*Math.cos(th), r*Math.sin(th)]); rrow.push(r);
     }
-    pts.push(row);
+    pts.push(row); rr.push(rrow);
   }
-  // 端面圓盤中心點（畫端蓋用）
+  // 假環境光遮蔽（AO）：牙峰亮、牙底暗，與視角無關——牙紋不再被抹平
+  const rMax = R, rMin = R - depth;
+  const norm = r => Math.min(1, Math.max(0, (r - rMin)/((rMax - rMin)||1)));
   const quads = [];
-  for(let iz=0; iz<NZ; iz++)
-    for(let itc=0; itc<NT; itc++)
-      quads.push([pts[iz][itc], pts[iz+1][itc], pts[iz+1][itc+1], pts[iz][itc+1]]);
-  // 端蓋：用牙底半徑的正多邊形扇形
+  for(let iz=0; iz<NZ; iz++) for(let itc=0; itc<NT; itc++){
+    const occl = (norm(rr[iz][itc]) + norm(rr[iz+1][itc]) + norm(rr[iz+1][itc+1]) + norm(rr[iz][itc+1]))/4;
+    quads.push({p:[pts[iz][itc], pts[iz+1][itc], pts[iz+1][itc+1], pts[iz][itc+1]], occl});
+  }
   for(const [iz, dir] of [[0,-1],[NZ,1]]){
     const c = [pts[iz][0][0], 0, 0];
     for(let itc=0; itc<NT; itc++){
       const p1 = pts[iz][itc], p2 = pts[iz][itc+1];
-      quads.push(dir<0 ? [c, p1, p2, p2] : [c, p2, p1, p1]); // 三角形（末點重複）
+      quads.push({p: dir<0 ? [c, p1, p2, p2] : [c, p2, p1, p1], occl:0.55});
     }
   }
   v3d.quads = quads;
@@ -641,20 +847,23 @@ function renderV3D(){
 
   const drawn = [];
   for(const q of quads){
-    const a = rot(q[0]), b = rot(q[1]), c = rot(q[2]), d = rot(q[3]);
+    const P = q.p;
+    const a = rot(P[0]), b = rot(P[1]), c = rot(P[2]), d = rot(P[3]);
     // 法向量（兩邊外積），一律翻向觀察者（-z）再打光，避免內外面顛倒
     const u = [b[0]-a[0], b[1]-a[1], b[2]-a[2]];
     const v = [d[0]-a[0], d[1]-a[1], d[2]-a[2]];
     let n = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]];
     const nl = Math.hypot(n[0],n[1],n[2]) || 1;
     if(n[2] > 0){ n = [-n[0],-n[1],-n[2]]; }
-    const shade = Math.max(0.08, (n[0]*light[0]+n[1]*light[1]+n[2]*light[2])/nl);
+    const lit = Math.max(0.15, (n[0]*light[0]+n[1]*light[1]+n[2]*light[2])/nl);
+    const ao = 0.4 + 0.6*q.occl;                      // 牙峰亮牙底暗（與視角無關）
+    const shade = lit * ao;
     drawn.push({pts:[a,b,c,d], z:(a[2]+b[2]+c[2]+d[2])/4, shade});
   }
   drawn.sort((p,q) => q.z - p.z);                    // 遠的先畫
   for(const f of drawn){
-    const g = Math.round(58 + f.shade*185);
-    ctx.fillStyle = `rgb(${g},${Math.round(g*1.02)},${Math.min(255,Math.round(g*1.08))})`;
+    const g = Math.round(34 + f.shade*205);
+    ctx.fillStyle = `rgb(${g},${Math.round(g*1.03)},${Math.min(255,Math.round(g*1.1))})`;
     ctx.beginPath();
     ctx.moveTo(cx + f.pts[0][0]*s, cy + f.pts[0][1]*s);
     for(let i=1;i<4;i++) ctx.lineTo(cx + f.pts[i][0]*s, cy + f.pts[i][1]*s);
@@ -671,18 +880,44 @@ function stepV3D(){
 
 window.open3D = function(){
   if(!curItem) return;
-  buildMesh(curItem, curGroup);
-  document.getElementById('v3dtitle').textContent =
-    `${curItem.name}${curItem.alias ? '（'+curItem.alias+'）' : ''}`;
-  const ang = (curGroup.key==='PT'||curGroup.key==='PF') ? '55°' : '60°';
-  document.getElementById('v3dinfo').textContent =
-    `⌀${fmt(curItem.od)} mm × 牙距 ${fmt(Math.round(curItem.pitch*1000)/1000)} mm｜牙角 ${ang}｜${curItem.taper}（依真實比例生成）`;
+  const it = curItem, gp = curGroup;
+  document.getElementById('v3dtitle').textContent = it.name;
+  const tag = document.getElementById('v3dtag');
+  tag.textContent = it.alias || gp.key; tag.style.background = gp.color;
+  document.getElementById('v3dinfo').textContent = `${it.desig}｜精確尺寸見下方剖面詳圖`;
+  document.getElementById('v3dhero').innerHTML = buildHero(it, gp);
+  document.getElementById('v3dprofile').innerHTML = buildProfileSVG(it, gp);
+  document.getElementById('v3dtable').innerHTML = buildDimTable(it, gp);
   v3d.wrap.classList.add('open');
-  v3d.rx = -0.45; v3d.ry = 0.6; v3d.zoom = 1; v3d.auto = true;
-  clearInterval(v3d.timer);
-  v3d.timer = setInterval(stepV3D, 33);
-  stepV3D();
+  setView('profile');                              // 預設先顯示剖面詳圖
 };
+
+// 切換「剖面詳圖／立體牙紋」；3D 迴圈只在立體檢視時跑（省電、避免背景空轉）
+function setView(v){
+  const prof = document.getElementById('v3dprofilewrap');
+  const sol  = document.getElementById('v3dsolid');
+  document.querySelectorAll('#v3dviews button').forEach(b => {
+    const on = b.dataset.view === v;
+    b.classList.toggle('on', on);
+    b.style.background = on ? (curGroup ? curGroup.color : '#0e7490') : '#fff';
+    b.style.color = on ? '#fff' : '#334155';
+    b.style.borderColor = on ? (curGroup ? curGroup.color : '#0e7490') : '#cbd5e1';
+  });
+  if(v === 'solid'){
+    prof.style.display = 'none'; sol.style.display = 'block';
+    document.getElementById('v3dsolidnote').textContent =
+      '立體示意 · 牙紋已放大以便觀察，實際尺寸請看剖面詳圖';
+    buildMesh(curItem, curGroup);
+    v3d.rx = -0.5; v3d.ry = 0.5; v3d.zoom = 1; v3d.auto = true;
+    clearInterval(v3d.timer);
+    v3d.timer = setInterval(stepV3D, 33);
+    stepV3D();
+  } else {
+    sol.style.display = 'none'; prof.style.display = 'block';
+    clearInterval(v3d.timer);
+  }
+}
+document.querySelectorAll('#v3dviews button').forEach(b => b.onclick = () => setView(b.dataset.view));
 document.getElementById('v3dclose').onclick = () => {
   v3d.wrap.classList.remove('open');
   clearInterval(v3d.timer);
