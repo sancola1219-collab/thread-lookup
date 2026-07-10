@@ -13,8 +13,20 @@
   ② 佈局繪製   render()：每群組一橫排卡片，圓依 SCALE=1.5 px/mm 真實比例
   ③ 互動       fit()/zoomAt() + pointer 事件（拖曳、雙指縮放）＋ applyFilter() 搜尋
   ④ 說明欄     select() 點卡片 → renderPanel()；mat/id 兩個固定分頁
+  ⑤ 3D檢視     buildMesh()（螺旋牙型網格）＋ renderV3D()（軟體渲染 painter 排序）
+              點卡片 → 右欄「🧊 3D 檢視」按鈕 → 全螢幕 overlay #viewer3d
 </script>
 ```
+
+## 3D 檢視器（零依賴軟體渲染）
+
+- **參數化生成**：`buildMesh(item, group)` 依外徑、牙距、牙角（PT/PF=55°、其他=60°）、
+  錐度（1:16 時前端漸細）建網格。半徑函數＝三角波（頂/底各留 12.5% 平面），
+  牙深＝完整牙高 × 0.72（模擬截頂截底）。
+- **渲染**：純 canvas 2D。每幀旋轉頂點 → 法向量翻向觀察者打光 → 依平均深度
+  painter 排序 → 填色。不用 rAF、用 `setInterval 33ms`（原因見 lessons）。
+- **互動**：拖曳旋轉（rx 夾在 ±1.5）、滾輪/雙指縮放、放開後恢復自動旋轉。
+- 改牙型視覺（牙深、平面比例）→ 動 `buildMesh` 內 `depth` 與 `(t-0.125)/0.75`。
 
 ## 常見修改怎麼做
 
@@ -57,4 +69,5 @@ items 每筆必填 `name, alias, od, odIn, tpi, pitch, drill, taper, desig`（`e
 2. 初始畫面＝五大類全覽（不是空白、不是 scale(0)）
 3. 搜尋「4分」→ PT/PF/NPT 1/2 與 4分牙；「21」→ 外徑 21mm 附近；「M10」→ 只有 M10
 4. 點任一卡片 → 右欄出現規格表；三個分頁都有內容
-5. F12 console 無錯誤
+5. 點「🧊 3D 檢視」→ 螺牙模型有亮暗立體感且自動旋轉，拖曳可轉、✕ 可關
+6. F12 console 無錯誤
