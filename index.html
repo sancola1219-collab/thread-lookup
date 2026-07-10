@@ -823,6 +823,9 @@ function buildMesh(it, gp){
   }
   v3d.quads = quads;
   v3d.modelR = Math.hypot(len/2, R);
+  const Gi = threadGeom(it, gp);
+  v3d.info = {name:it.name, R:it.od/2, od:it.od, d1:Gi.d1, pitch:it.pitch, tpi:it.tpi,
+              alpha:Gi.alpha, isTaper:Gi.isTaper, drill:it.drill, metric:gp.key==='M'};
 }
 
 function renderV3D(){
@@ -870,6 +873,66 @@ function renderV3D(){
     ctx.closePath();
     ctx.fill();
   }
+  drawV3DDims(ctx, rot, s, cx, cy, W, Hc);           // 尺寸標註疊加（隨模型旋轉）
+}
+
+/* 3D 疊加尺寸：直徑卡尺(隨模型轉)＋牙距卡尺＋左上資訊 HUD */
+function v3dArrow(ctx, tx, ty, fromx, fromy, size, color){
+  const a = Math.atan2(ty-fromy, tx-fromx);
+  ctx.beginPath(); ctx.moveTo(tx, ty);
+  ctx.lineTo(tx-size*Math.cos(a-0.42), ty-size*Math.sin(a-0.42));
+  ctx.lineTo(tx-size*Math.cos(a+0.42), ty-size*Math.sin(a+0.42));
+  ctx.closePath(); ctx.fillStyle = color; ctx.fill();
+}
+function v3dPill(ctx, x, y, text, color){
+  ctx.font = 'bold 14px "Microsoft JhengHei","Noto Sans TC",sans-serif';
+  const w = ctx.measureText(text).width+16, h = 23, rx = x-w/2, ry = y-h/2;
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(rx, ry, w, h, 6); else ctx.rect(rx, ry, w, h);
+  ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.fill();
+  ctx.lineWidth = 1.4; ctx.strokeStyle = color; ctx.stroke();
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y+1); ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+}
+function drawV3DDims(ctx, rot, s, cx, cy, W, Hc){
+  const I = v3d.info; if(!I) return;
+  const ax = rot([1,0,0]); let dx = ax[0], dy = ax[1];
+  const dl = Math.hypot(dx,dy);                        // 軸向（螢幕）
+  if(dl < 0.1){ dx = 1; dy = 0; } else { dx/=dl; dy/=dl; } // 近端面視角時軸向退化，退回水平
+  const px = -dy, py = dx, R = I.R*s;                  // 垂直軸向、投影半徑
+  // 直徑卡尺（過中心、垂直軸線，隨模型轉）
+  const e1x=cx+px*R, e1y=cy+py*R, e2x=cx-px*R, e2y=cy-py*R;
+  ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(e1x,e1y); ctx.lineTo(e2x,e2y); ctx.stroke();
+  v3dArrow(ctx,e1x,e1y,cx,cy,10,'#38bdf8'); v3dArrow(ctx,e2x,e2y,cx,cy,10,'#38bdf8');
+  v3dPill(ctx, cx+px*(R+24), cy+py*(R+24), `⌀${r3(I.od)}`, '#0369a1');
+  // 牙距卡尺（沿軸、貼另一側輪廓）
+  const bx=cx-px*(R+20), by=cy-py*(R+20);
+  const n = Math.max(1, Math.min(6, Math.round(70/Math.max(1, I.pitch*s))));
+  const half = I.pitch*s*n/2;
+  const q1x=bx-dx*half, q1y=by-dy*half, q2x=bx+dx*half, q2y=by+dy*half;
+  ctx.strokeStyle = '#fb923c'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(q1x,q1y); ctx.lineTo(q2x,q2y); ctx.stroke();
+  v3dArrow(ctx,q1x,q1y,q2x,q2y,9,'#fb923c'); v3dArrow(ctx,q2x,q2y,q1x,q1y,9,'#fb923c');
+  v3dPill(ctx, bx-px*15, by-py*15, `牙距 ${r3(I.pitch)}${n>1?'×'+n:''}`, '#c2410c');
+  // 資訊 HUD（左上，永遠可讀，畫最後蓋在最上）
+  const lines = [
+    `外徑 ⌀${r3(I.od)} mm`, `底徑 ⌀${r2(I.d1)} mm`,
+    `牙距 ${r3(I.pitch)} mm${I.metric?'（公制）':` · ${fmt(I.tpi)}T`}`,
+    `牙角 ${I.alpha}°`, I.isTaper?'錐度 1:16（錐牙）':'平行牙（直牙）',
+    `底孔 ${I.drill?'約⌀'+r2(I.drill):'—'}`,
+  ];
+  ctx.font = '13px "Microsoft JhengHei","Noto Sans TC",sans-serif';
+  let bw = 0; for(const l of lines) bw = Math.max(bw, ctx.measureText(l).width);
+  bw += 24; const bh = lines.length*20+34, bx0 = 12, by0 = 12;
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(bx0, by0, bw, bh, 10); else ctx.rect(bx0, by0, bw, bh);
+  ctx.fillStyle = 'rgba(15,23,42,0.82)'; ctx.fill();
+  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(148,163,184,0.5)'; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 14px "Microsoft JhengHei","Noto Sans TC",sans-serif';
+  ctx.fillText(I.name+' 尺寸', bx0+12, by0+22);
+  ctx.font = '13px "Microsoft JhengHei","Noto Sans TC",sans-serif';
+  lines.forEach((l,i)=>{ ctx.fillStyle = i===3 ? '#7dd3fc' : '#e2e8f0'; ctx.fillText(l, bx0+12, by0+44+i*20); });
 }
 
 // 用 setInterval 而非 requestAnimationFrame：部分內嵌/背景環境 rAF 不觸發（見 lessons）
@@ -906,7 +969,7 @@ function setView(v){
   if(v === 'solid'){
     prof.style.display = 'none'; sol.style.display = 'block';
     document.getElementById('v3dsolidnote').textContent =
-      '立體示意 · 牙紋已放大以便觀察，實際尺寸請看剖面詳圖';
+      '立體示意 · 牙紋已放大；直徑／牙距卡尺隨模型旋轉，左上角尺寸表永遠可讀（精確值以剖面詳圖為準）';
     buildMesh(curItem, curGroup);
     v3d.rx = -0.5; v3d.ry = 0.5; v3d.zoom = 1; v3d.auto = true;
     clearInterval(v3d.timer);
