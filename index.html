@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>螺牙管件查詢圖鑑</title>
+<style>
+  :root{
+    --bg:#f4f6f8; --panel:#ffffff; --ink:#1e293b; --muted:#64748b;
+    --line:#d8dee6; --accent:#0e7490;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; overflow:hidden;}
+  body{
+    font-family:"Microsoft JhengHei","Noto Sans TC",system-ui,sans-serif;
+    background:var(--bg); color:var(--ink);
+    display:flex; flex-direction:column;
+  }
+  /* ── 工具列 ── */
+  header{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line);
+    z-index:5;
+  }
+  header h1{font-size:17px; white-space:nowrap;}
+  header .hint{font-size:12px; color:var(--muted); white-space:nowrap;}
+  #search{
+    flex:1 1 160px; min-width:140px; max-width:300px;
+    padding:6px 10px; border:1px solid var(--line); border-radius:6px; font-size:14px;
+  }
+  .chip{
+    padding:5px 10px; border:1px solid var(--line); border-radius:14px;
+    background:#fff; font-size:13px; cursor:pointer; user-select:none; white-space:nowrap;
+  }
+  .chip.on{color:#fff;}
+  .zbtn{
+    width:32px; height:32px; border:1px solid var(--line); border-radius:6px;
+    background:#fff; font-size:16px; cursor:pointer;
+  }
+  .zbtn:hover{background:#eef2f6;}
+  /* ── 主區 ── */
+  main{flex:1; display:flex; min-height:0;}
+  #stage{flex:1; position:relative; min-width:0;}
+  #canvas{width:100%; height:100%; display:block; cursor:grab; touch-action:none;}
+  #canvas.dragging{cursor:grabbing;}
+  /* ── 說明欄 ── */
+  aside{
+    width:330px; flex:none; background:var(--panel); border-left:1px solid var(--line);
+    display:flex; flex-direction:column; min-height:0;
+  }
+  .tabs{display:flex; border-bottom:1px solid var(--line);}
+  .tabs button{
+    flex:1; padding:9px 4px; border:none; background:none; font-size:14px;
+    cursor:pointer; color:var(--muted); border-bottom:2px solid transparent;
+  }
+  .tabs button.on{color:var(--accent); border-bottom-color:var(--accent); font-weight:bold;}
+  .tabbody{flex:1; overflow-y:auto; padding:14px; font-size:14px; line-height:1.7;}
+  .tabbody h3{font-size:15px; margin:14px 0 4px; color:var(--accent);}
+  .tabbody h3:first-child{margin-top:0;}
+  .tabbody table{width:100%; border-collapse:collapse; font-size:13px; margin:6px 0;}
+  .tabbody td,.tabbody th{border:1px solid var(--line); padding:4px 6px; text-align:left; vertical-align:top;}
+  .tabbody th{background:#f1f5f9; white-space:nowrap;}
+  .tabbody .big{font-size:20px; font-weight:bold;}
+  .tabbody .tag{
+    display:inline-block; padding:1px 8px; border-radius:10px; color:#fff;
+    font-size:12px; margin-left:6px; vertical-align:middle;
+  }
+  .tabbody .dim{color:var(--muted); font-size:12px;}
+  .placeholder{color:var(--muted); text-align:center; margin-top:40px;}
+  @media (max-width:760px){
+    main{flex-direction:column;}
+    aside{width:100%; height:42%; border-left:none; border-top:1px solid var(--line);}
+  }
+  /* ── SVG 卡片 ── */
+  .card{cursor:pointer;}
+  .card rect.box{fill:#fff; stroke-width:1.5; rx:10;}
+  .card.dimmed{opacity:0.12;}
+  .card.selected rect.box{stroke-width:4;}
+  text{user-select:none;}
+</style>
+</head>
+<body>
+<header>
+  <h1>🔩 螺牙管件查詢圖鑑</h1>
+  <input id="search" type="search" placeholder="搜尋：4分、1/2、21、M10、NPT…">
+  <span id="chips"></span>
+  <button class="zbtn" id="zin"  title="放大">＋</button>
+  <button class="zbtn" id="zout" title="縮小">－</button>
+  <button class="zbtn" id="zfit" title="全覽">⛶</button>
+  <span class="hint">滾輪縮放｜拖曳平移｜點卡片看說明</span>
+</header>
+<main>
+  <div id="stage"><svg id="canvas"><g id="world"></g></svg></div>
+  <aside>
+    <div class="tabs">
+      <button data-tab="spec" class="on">規格說明</button>
+      <button data-tab="mat">材質／密封</button>
+      <button data-tab="id">怎麼分辨</button>
+    </div>
+    <div class="tabbody" id="panelBody"></div>
+  </aside>
+</main>
+
+<script>
+'use strict';
+/* ============================================================
+   資料區 —— 尺寸依據：
+   BSPT/BSPP: ISO 228 / BS 21 / JIS B0202-0203
+   NPT: ASME B1.20.1
+   公制: ISO 261/262（底孔＝外徑−牙距）
+   UNC/UNF: ASME B1.1
+   底孔標「約」者為業界慣用參考值，攻牙前請依材質微調
+   ============================================================ */
+
+// 管件牙共用：吋別 → 台灣俗稱
+const PIPE_ALIAS = {
+  '1/8':'1分','1/4':'2分','3/8':'3分','1/2':'4分','3/4':'6分','1':'1吋',
+  '1-1/4':'吋2（1吋2分）','1-1/2':'吋半（1吋半）','2':'2吋','2-1/2':'2吋半','3':'3吋','4':'4吋'
+};
+// BSPT/BSPP 大徑（兩者同一系列）
+const BSP = [
+  {size:'1/8',  od:9.728,  tpi:28},
+  {size:'1/4',  od:13.157, tpi:19},
+  {size:'3/8',  od:16.662, tpi:19},
+  {size:'1/2',  od:20.955, tpi:14},
+  {size:'3/4',  od:26.441, tpi:14},
+  {size:'1',    od:33.249, tpi:11},
+  {size:'1-1/4',od:41.910, tpi:11},
+  {size:'1-1/2',od:47.803, tpi:11},
+  {size:'2',    od:59.614, tpi:11},
+  {size:'2-1/2',od:75.184, tpi:11},
+  {size:'3',    od:87.884, tpi:11},
+  {size:'4',    od:113.030,tpi:11},
+];
+const RC_DRILL  = {'1/8':8.4,'1/4':11.2,'3/8':14.7,'1/2':18.4,'3/4':23.8,'1':30.0,'1-1/4':38.6,'1-1/2':44.6,'2':56.4};
+const NPT_DRILL = {'1/8':8.7,'1/4':11.1,'3/8':14.5,'1/2':17.9,'3/4':23.0,'1':28.9,'1-1/4':37.7,'1-1/2':43.5,'2':55.6};
+const NPT = [
+  {size:'1/8',  od:10.287, tpi:27},
+  {size:'1/4',  od:13.716, tpi:18},
+  {size:'3/8',  od:17.145, tpi:18},
+  {size:'1/2',  od:21.336, tpi:14},
+  {size:'3/4',  od:26.670, tpi:14},
+  {size:'1',    od:33.401, tpi:11.5},
+  {size:'1-1/4',od:42.164, tpi:11.5},
+  {size:'1-1/2',od:48.260, tpi:11.5},
+  {size:'2',    od:60.325, tpi:11.5},
+  {size:'2-1/2',od:73.025, tpi:8},
+  {size:'3',    od:88.900, tpi:8},
+  {size:'4',    od:114.300,tpi:8},
+];
+const METRIC = [ // [外徑, 粗牙距, 常見細牙]
+  [3,0.5,''],[4,0.7,''],[5,0.8,''],[6,1.0,''],[8,1.25,'1.0'],
+  [10,1.5,'1.25 / 1.0'],[12,1.75,'1.5 / 1.25'],[14,2.0,'1.5'],[16,2.0,'1.5'],
+  [18,2.5,'1.5'],[20,2.5,'1.5 / 2.0'],[22,2.5,'1.5'],[24,3.0,'2.0'],
+  [27,3.0,'2.0'],[30,3.5,'2.0'],
+];
+const UNIFIED = [ // [名稱, 外徑mm, UNC牙數, UNF牙數, UNC底孔, 俗稱]
+  ['#4',   2.845, 40, 48, 2.26, ''],
+  ['#6',   3.505, 32, 40, 2.71, ''],
+  ['#8',   4.166, 32, 36, 3.45, ''],
+  ['#10',  4.826, 24, 32, 3.80, ''],
+  ['1/4"', 6.350, 20, 28, 5.11, '2分牙'],
+  ['5/16"',7.938, 18, 24, 6.53, '2分半牙'],
+  ['3/8"', 9.525, 16, 24, 7.94, '3分牙'],
+  ['7/16"',11.112,14, 20, 9.35, '3分半牙'],
+  ['1/2"', 12.700,13, 20, 10.80,'4分牙'],
+  ['9/16"',14.288,12, 18, 12.20,'4分半牙'],
+  ['5/8"', 15.875,11, 18, 13.50,'5分牙'],
+  ['3/4"', 19.050,10, 16, 16.50,'6分牙'],
+  ['7/8"', 22.225, 9, 14, 19.50,'7分牙'],
+  ['1"',   25.400, 8, 12, 22.25,'8分牙（1吋牙）'],
+];
+
+const fmt = n => (Math.round(n*1000)/1000).toString();
+const pitchOf = tpi => 25.4/tpi;
+
+// 組出統一的卡片資料結構
+const GROUPS = [
+  {
+    key:'PT', color:'#0e7490', bg:'#ecfeff',
+    title:'PT 錐牙（BSPT／R・Rc）',
+    sub:'牙角 55°｜錐度 1:16｜ISO 7 / JIS B0203',
+    seal:'牙本身密封：纏生料帶（止洩帶）或塗密封膏後鎖緊',
+    note:'台灣、日本水電管件的主流牙。外牙叫 R（舊稱 PT 公牙），內牙叫 Rc。與 NPT「不能」互鎖：牙角 55° vs 60° 不同。',
+    use:'水管、空壓管路、瓦斯、消防管件（台日規設備）',
+    items: BSP.map(b => ({
+      name:`PT ${b.size}"`, alias:PIPE_ALIAS[b.size], od:b.od, odIn:b.od/25.4,
+      tpi:b.tpi, pitch:pitchOf(b.tpi), drill:RC_DRILL[b.size]||null,
+      taper:'錐牙 1:16', desig:`R ${b.size}（外牙）／ Rc ${b.size}（內牙）`,
+    })),
+  },
+  {
+    key:'PF', color:'#7c3aed', bg:'#f5f3ff',
+    title:'PF 直牙（BSPP／G）',
+    sub:'牙角 55°｜平行牙｜ISO 228 / JIS B0202',
+    seal:'牙不密封：靠平墊圈、O 環或組合墊圈壓在端面密封',
+    note:'和 PT 同一系列的外徑與牙數，但牙是平行的。舊 JIS 叫 PF，ISO 叫 G。壓力錶、油壓氣動接頭常用。G 外牙可鎖 Rc 內牙應急，但反過來 R 外牙鎖 G 內牙不密封。',
+    use:'壓力錶（G1/4、G1/2）、油壓／氣動接頭、軟管牙口',
+    items: BSP.map(b => ({
+      name:`PF ${b.size}"`, alias:PIPE_ALIAS[b.size], od:b.od, odIn:b.od/25.4,
+      tpi:b.tpi, pitch:pitchOf(b.tpi), drill:Math.round((b.od-pitchOf(b.tpi))*10)/10,
+      taper:'平行（直牙）', desig:`G ${b.size}`,
+    })),
+  },
+  {
+    key:'NPT', color:'#b45309', bg:'#fffbeb',
+    title:'NPT 美規錐牙',
+    sub:'牙角 60°｜錐度 1:16｜ASME B1.20.1',
+    seal:'牙本身密封：生料帶或密封膏（NPTF 乾式牙可免）',
+    note:'美規設備、美製機台的管牙。1/2" 與 3/4" 的牙數和 PT 一樣是 14 TPI，最容易搞混——差在牙角 60°（PT 是 55°），硬鎖會漏。',
+    use:'美規機台、化工設備、美製閥件儀錶',
+    items: NPT.map(b => ({
+      name:`NPT ${b.size}"`, alias:`美規${PIPE_ALIAS[b.size]}`, od:b.od, odIn:b.od/25.4,
+      tpi:b.tpi, pitch:pitchOf(b.tpi), drill:NPT_DRILL[b.size]||null,
+      taper:'錐牙 1:16', desig:`${b.size}-${b.tpi} NPT`,
+    })),
+  },
+  {
+    key:'M', color:'#15803d', bg:'#f0fdf4',
+    title:'公制螺紋 M（粗牙／細牙）',
+    sub:'牙角 60°｜平行牙｜ISO 261 / 262',
+    seal:'機械固定用，不做流體密封；防鬆用彈簧墊圈、螺絲膠',
+    note:'機械螺絲、螺栓的主流。標法 M外徑×牙距，例 M10×1.5。不寫牙距就是粗牙。底孔＝外徑−牙距（例 M10 粗牙底孔 8.5）。',
+    use:'機械組裝、螺栓螺帽、設備固定',
+    items: METRIC.map(([d,p,fine]) => ({
+      name:`M${d}`, alias: fine ? `細牙 ×${fine}` : '', od:d, odIn:d/25.4,
+      tpi:25.4/p, pitch:p, drill:Math.round((d-p)*100)/100,
+      taper:'平行（直牙）', desig:`M${d}×${p}${fine?`（細牙 M${d}×${fine}）`:''}`,
+    })),
+  },
+  {
+    key:'UN', color:'#be123c', bg:'#fff1f2',
+    title:'美制統一螺紋 UNC／UNF',
+    sub:'牙角 60°｜平行牙｜ASME B1.1',
+    seal:'機械固定用，不做流體密封',
+    note:'美規機械螺絲。UNC 粗牙、UNF 細牙，標法「外徑-牙數」例 1/4-20 UNC。和公制 M 不能混用（M6 vs 1/4" 外徑只差 0.35mm，最常鎖錯）。',
+    use:'美規設備維修、進口機械、汽機車',
+    items: UNIFIED.map(([nm,od,unc,unf,drill,alias]) => ({
+      name:`${nm}-${unc}`, alias, od, odIn:od/25.4,
+      tpi:unc, pitch:25.4/unc, drill,
+      taper:'平行（直牙）', desig:`${nm}-${unc} UNC ／ ${nm}-${unf} UNF`,
+      extra:`UNF 細牙：${unf} TPI（牙距 ${fmt(Math.round(25.4/unf*1000)/1000)} mm）`,
+    })),
+  },
+];
+
+const MATERIALS = [
+  ['不鏽鋼 SUS304（白鐵）','最通用。耐鏽，水路、空壓、一般環境都可。台灣說「白鐵管件」多半指 304。'],
+  ['不鏽鋼 SUS316','加鉬、更耐蝕。海邊、化學藥劑、食品廠選 316／316L。'],
+  ['黃銅（C3604 等）','水路閥件、快速接頭、錶類牙口。易加工、不生鏽鏽垢；怕氨氣、海水久了會脫鋅。'],
+  ['碳鋼黑鐵（黑管）','消防、蒸氣、瓦斯配管。強度高但會鏽，外露要油漆。'],
+  ['鍍鋅鐵 GIP','黑鐵鍍鋅防鏽，一般給水、風管配管。焊接處鍍層會失效。'],
+  ['PVC／CPVC 塑膠','冷水、排水、電管。便宜不生鏽；不耐熱不耐壓，牙口過鎖會裂。'],
+  ['尼龍／POM 塑膠接頭','氣動快插接頭常見，輕、便宜，限低壓氣體。'],
+];
+const SEALS = [
+  ['生料帶（PTFE 止洩帶）','錐牙（PT／NPT）標配。順鎖緊方向纏 3～5 圈，牙口第一牙留空避免帶屑進管路。'],
+  ['液態密封膠（厭氧膠）','取代生料帶，適合震動環境；固化需時間。'],
+  ['麻絲＋密封膏','傳統工法，大口徑鑄鐵管件仍會用。'],
+  ['平墊圈／O 環／組合墊圈','直牙（PF／G）唯一正解——牙本身不密封，靠端面壓墊圈。'],
+];
+
+/* ============================================================
+   SVG 佈局與繪製
+   ============================================================ */
+const SVGNS = 'http://www.w3.org/2000/svg';
+const world = document.getElementById('world');
+const svg   = document.getElementById('canvas');
+const SCALE = 1.5;          // px / mm（圓依真實比例）
+const PAD = 60, CARD_GAP = 22, GROUP_GAP = 70, TEXT_H = 128;
+
+function el(tag, attrs, parent){
+  const e = document.createElementNS(SVGNS, tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]);
+  if(parent) parent.appendChild(e);
+  return e;
+}
+function txt(parent, x, y, str, size, opts={}){
+  const t = el('text', {x, y, 'font-size':size, fill:opts.fill||'#1e293b',
+    'font-weight':opts.bold?'bold':'normal', 'text-anchor':opts.anchor||'start'}, parent);
+  t.textContent = str;
+  return t;
+}
+
+let worldW = 0, worldH = 0;
+const cardIndex = [];   // {g, item, group} 供搜尋/點選
+
+function render(){
+  world.innerHTML = '';
+  cardIndex.length = 0;
+  let y = PAD;
+  worldW = 0;
+
+  for(const grp of GROUPS){
+    if(!grp.visible) continue;
+    // 群組標題
+    txt(world, PAD, y+30, grp.title, 30, {bold:true, fill:grp.color});
+    txt(world, PAD, y+58, `${grp.sub}　密封：${grp.seal}`, 15, {fill:'#64748b'});
+    y += 78;
+
+    // 卡片列
+    let x = PAD, rowH = 0;
+    for(const item of grp.items){
+      const d = item.od * SCALE;
+      const cw = Math.max(196, d + 44);
+      const ch = TEXT_H + Math.max(64, d + 34);
+      rowH = Math.max(rowH, ch);
+
+      const g = el('g', {class:'card', transform:`translate(${x},${y})`}, world);
+      el('rect', {class:'box', width:cw, height:ch, rx:10, fill:grp.bg, stroke:grp.color}, g);
+
+      // 文字區
+      txt(g, 12, 26, item.name, 19, {bold:true, fill:grp.color});
+      if(item.alias) txt(g, 12, 46, item.alias, 14, {bold:true, fill:'#334155'});
+      txt(g, 12, 68,  `外徑 ${fmt(item.od)} mm（${item.odIn.toFixed(3)}"）`, 12.5);
+      txt(g, 12, 86,  `牙數 ${fmt(item.tpi)} TPI｜牙距 ${fmt(Math.round(item.pitch*1000)/1000)} mm`, 12.5);
+      txt(g, 12, 104, item.drill ? `底孔 約 ${fmt(item.drill)} mm` : '底孔 —（大口徑少攻牙）', 12.5);
+      txt(g, 12, 122, item.taper, 12.5, {fill:'#64748b'});
+
+      // 真實比例圓（外徑實線＋牙底虛線）
+      const cy = TEXT_H + Math.max(32, d/2 + 17);
+      const cx = cw/2;
+      el('circle', {cx, cy, r:d/2, fill:'none', stroke:grp.color, 'stroke-width':2}, g);
+      const minor = Math.max(0, item.od - 1.2*item.pitch) * SCALE;
+      if(minor > 4) el('circle', {cx, cy, r:minor/2, fill:'none', stroke:grp.color,
+        'stroke-width':1, 'stroke-dasharray':'4 3', opacity:0.55}, g);
+      // 直徑標線
+      el('line', {x1:cx-d/2, y1:cy, x2:cx+d/2, y2:cy, stroke:grp.color, 'stroke-width':1, opacity:0.5}, g);
+      txt(g, cx, cy - d/2 - 6, `⌀${fmt(item.od)}`, 11, {anchor:'middle', fill:grp.color});
+
+      cardIndex.push({g, item, group:grp});
+      g.addEventListener('click', () => { if(!moved) select(item, grp, g); });
+
+      x += cw + CARD_GAP;
+    }
+    worldW = Math.max(worldW, x + PAD);
+    y += rowH + GROUP_GAP;
+  }
+  worldH = y + PAD;
+  applyFilter();
+}
+
+/* ── 平移縮放 ── */
+let tx=0, ty=0, k=1;
+function apply(){ world.setAttribute('transform', `translate(${tx},${ty}) scale(${k})`); }
+function fit(){
+  const vw = svg.clientWidth, vh = svg.clientHeight;
+  if(vw < 50 || vh < 50){ requestAnimationFrame(fit); return; } // 版面尚未排好時重試
+  k = Math.min(vw/worldW, vh/worldH) * 0.97;
+  tx = (vw - worldW*k)/2;
+  ty = (vh - worldH*k)/2;
+  apply();
+}
+function zoomAt(px, py, factor){
+  const nk = Math.min(8, Math.max(0.02, k*factor));
+  tx = px - (px-tx)*(nk/k);
+  ty = py - (py-ty)*(nk/k);
+  k = nk; apply();
+}
+svg.addEventListener('wheel', e => {
+  e.preventDefault();
+  zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY*0.0012));
+}, {passive:false});
+
+const pointers = new Map();
+let moved = false, pinchDist = 0;
+svg.addEventListener('pointerdown', e => {
+  svg.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, {x:e.offsetX, y:e.offsetY});
+  moved = false;
+  svg.classList.add('dragging');
+  if(pointers.size === 2){
+    const [a,b] = [...pointers.values()];
+    pinchDist = Math.hypot(a.x-b.x, a.y-b.y);
+  }
+});
+svg.addEventListener('pointermove', e => {
+  if(!pointers.has(e.pointerId)) return;
+  const prev = pointers.get(e.pointerId);
+  const cur = {x:e.offsetX, y:e.offsetY};
+  if(Math.hypot(cur.x-prev.x, cur.y-prev.y) > 3) moved = true;
+  if(pointers.size === 1){
+    tx += cur.x - prev.x; ty += cur.y - prev.y; apply();
+  }else if(pointers.size === 2){
+    pointers.set(e.pointerId, cur);
+    const [a,b] = [...pointers.values()];
+    const nd = Math.hypot(a.x-b.x, a.y-b.y);
+    if(pinchDist > 0) zoomAt((a.x+b.x)/2, (a.y+b.y)/2, nd/pinchDist);
+    pinchDist = nd;
+    return;
+  }
+  pointers.set(e.pointerId, cur);
+});
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  pinchDist = 0;
+  if(pointers.size === 0) svg.classList.remove('dragging');
+}
+svg.addEventListener('pointerup', endPointer);
+svg.addEventListener('pointercancel', endPointer);
+
+document.getElementById('zin').onclick  = () => zoomAt(svg.clientWidth/2, svg.clientHeight/2, 1.35);
+document.getElementById('zout').onclick = () => zoomAt(svg.clientWidth/2, svg.clientHeight/2, 1/1.35);
+document.getElementById('zfit').onclick = fit;
+window.addEventListener('resize', fit);
+
+/* ── 搜尋與群組篩選 ── */
+const searchBox = document.getElementById('search');
+searchBox.addEventListener('input', applyFilter);
+function applyFilter(){
+  const q = searchBox.value.trim().toLowerCase();
+  const qn = /^[\d.]+$/.test(q) ? parseFloat(q) : NaN; // 純數字才比對外徑 mm
+  for(const c of cardIndex){
+    let hit = !q;
+    if(q){
+      const hay = `${c.item.name} ${c.item.alias} ${c.item.desig} ${c.group.key} ${c.group.title}`.toLowerCase();
+      hit = hay.includes(q);
+      if(!hit && !isNaN(qn) && qn > 0) hit = Math.abs(c.item.od - qn) <= 1.2;
+    }
+    c.g.classList.toggle('dimmed', !hit);
+  }
+}
+
+const chipBox = document.getElementById('chips');
+for(const grp of GROUPS){
+  grp.visible = true;
+  const b = document.createElement('button');
+  b.className = 'chip on';
+  b.textContent = grp.key;
+  b.style.background = grp.color;
+  b.style.borderColor = grp.color;
+  b.onclick = () => {
+    grp.visible = !grp.visible;
+    b.classList.toggle('on', grp.visible);
+    b.style.background = grp.visible ? grp.color : '#fff';
+    b.style.color = grp.visible ? '#fff' : '#64748b';
+    render(); fit();
+  };
+  chipBox.appendChild(b);
+}
+
+/* ── 說明欄 ── */
+const panelBody = document.getElementById('panelBody');
+const tabs = document.querySelectorAll('.tabs button');
+let curTab = 'spec', curItem = null, curGroup = null, curCard = null;
+tabs.forEach(b => b.onclick = () => {
+  curTab = b.dataset.tab;
+  tabs.forEach(t => t.classList.toggle('on', t === b));
+  renderPanel();
+});
+function select(item, grp, g){
+  curItem = item; curGroup = grp;
+  if(curCard) curCard.classList.remove('selected');
+  curCard = g; g.classList.add('selected');
+  curTab = 'spec';
+  tabs.forEach(t => t.classList.toggle('on', t.dataset.tab === 'spec'));
+  renderPanel();
+}
+function renderPanel(){
+  if(curTab === 'mat'){
+    panelBody.innerHTML =
+      `<h3>常見材質</h3><table>` +
+      MATERIALS.map(([n,d]) => `<tr><th>${n}</th><td>${d}</td></tr>`).join('') +
+      `</table><h3>密封方式</h3><table>` +
+      SEALS.map(([n,d]) => `<tr><th>${n}</th><td>${d}</td></tr>`).join('') +
+      `</table><p class="dim">通則：錐牙（PT／NPT）靠牙＋生料帶密封；直牙（PF／G）靠墊圈密封；機械牙（M／UNC）不做流體密封。</p>`;
+    return;
+  }
+  if(curTab === 'id'){
+    panelBody.innerHTML =
+      `<h3>四步分辨法</h3>
+       <p><b>1. 量外徑</b>：卡尺量牙峰外徑（外牙）或內孔（內牙），回來對表找最接近的。</p>
+       <p><b>2. 數牙數</b>：25.4mm（1 吋）內數幾個牙峰＝TPI；公制直接量兩牙峰間距＝牙距 mm。</p>
+       <p><b>3. 看錐直</b>：錐牙前端細、越往後越粗；直牙整段一樣粗。</p>
+       <p><b>4. 認牙角</b>：PT／PF 是 55°，NPT／M／UNC 是 60°，用牙角規比對。</p>
+       <h3>最容易搞混的三組</h3>
+       <table>
+        <tr><th>PT 1/2 vs NPT 1/2</th><td>都是 14 TPI、外徑只差 0.4mm，差在 55°/60° 牙角。看設備來源：台日規→PT，美規→NPT。</td></tr>
+        <tr><th>M6 vs 1/4"-20</th><td>外徑 6.0 vs 6.35mm。能用手鎖進去兩三牙再變緊的，多半是鎖錯系統。</td></tr>
+        <tr><th>PT vs PF 同尺寸</th><td>外徑牙數全同，差在錐／直。G 外牙配 Rc 內牙鎖得進但要靠墊圈或膠才不漏。</td></tr>
+       </table>
+       <h3>口訣</h3>
+       <p class="dim">「一分約 10、二分 13、三分 17、四分 21、六分 27、一吋 33」——管件牙外徑 mm 速記。</p>`;
+    return;
+  }
+  // spec tab
+  if(!curItem){
+    panelBody.innerHTML = `<p class="placeholder">點左邊任一張卡片<br>這裡會顯示完整規格與說明</p>
+      <h3>畫布操作</h3><p class="dim">滾輪＝縮放（遠看比大小、近看讀尺寸）<br>拖曳＝平移｜⛶＝回到全覽<br>上方色塊可開關各螺牙分類</p>`;
+    return;
+  }
+  const it = curItem, gp = curGroup;
+  panelBody.innerHTML =
+    `<div class="big">${it.name}<span class="tag" style="background:${gp.color}">${gp.key}</span></div>
+     ${it.alias ? `<p><b>一般叫法：</b>${it.alias}</p>` : ''}
+     <p><b>正式標稱：</b>${it.desig}</p>
+     <table>
+       <tr><th>牙峰外徑</th><td>${fmt(it.od)} mm（${it.odIn.toFixed(3)}"）</td></tr>
+       <tr><th>牙數</th><td>${fmt(it.tpi)} TPI（每吋牙數）</td></tr>
+       <tr><th>牙距</th><td>${fmt(Math.round(it.pitch*1000)/1000)} mm</td></tr>
+       <tr><th>攻牙底孔</th><td>${it.drill ? `約 ${fmt(it.drill)} mm` : '—'}</td></tr>
+       <tr><th>牙型</th><td>${it.taper}｜牙角 ${gp.key==='PT'||gp.key==='PF' ? '55°' : '60°'}</td></tr>
+       ${it.extra ? `<tr><th>細牙</th><td>${it.extra}</td></tr>` : ''}
+     </table>
+     <h3>這類牙是什麼</h3><p>${gp.note}</p>
+     <h3>常見用途</h3><p>${gp.use}</p>
+     <h3>密封方式</h3><p>${gp.seal}</p>
+     <h3>建議材質</h3><p>水路一般用 SUS304 或黃銅；海邊化學用 SUS316；消防瓦斯用黑鐵；
+     詳見「材質／密封」分頁。</p>`;
+}
+
+/* ── 啟動 ── */
+render();
+fit();
+renderPanel();
+</script>
+</body>
+</html>
